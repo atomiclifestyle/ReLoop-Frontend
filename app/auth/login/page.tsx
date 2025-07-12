@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { use, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { User, Briefcase, Mail, Lock, Eye, EyeOff, BadgeIcon as IdCard } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { signIn } from "next-auth/react"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -26,7 +27,7 @@ export default function LoginPage() {
   })
 
   const [workerFormData, setWorkerFormData] = useState({
-    workerId: "",
+    worker_id: "",
     password: "",
   })
 
@@ -36,18 +37,27 @@ export default function LoginPage() {
     setError("")
 
     // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-
-    // Mock authentication logic for users
-    if (userFormData.email && userFormData.password) {
-      localStorage.setItem("userType", "user")
-      localStorage.setItem("isAuthenticated", "true")
-      localStorage.setItem("userEmail", userFormData.email)
-      router.push("/dashboard")
-    } else {
-      setError("Please fill in all fields")
+    if (userType == 'user') {
+      const res = await signIn('user_login', {
+        redirect: false,
+        email: userFormData.email,
+        password: userFormData.password
+      })
+      if (res?.ok) {
+        console.log(res)
+      }
+    } else if (userType == 'worker') {
+      const res = await signIn('worker_login', {
+        redirect: false,
+        worker_id: workerFormData.worker_id,
+        password: workerFormData.password
+      })
+      if (res?.ok) {
+        console.log(res)
+      }
+    }else{
+      setError('Invalid userType')
     }
-
     setIsLoading(false)
   }
 
@@ -60,10 +70,10 @@ export default function LoginPage() {
     await new Promise((resolve) => setTimeout(resolve, 1500))
 
     // Mock authentication logic for workers
-    if (workerFormData.workerId && workerFormData.password) {
+    if (workerFormData.worker_id && workerFormData.password) {
       localStorage.setItem("userType", "worker")
       localStorage.setItem("isAuthenticated", "true")
-      localStorage.setItem("workerId", workerFormData.workerId)
+      localStorage.setItem("workerId", workerFormData.worker_id)
       router.push("/worker/dashboard")
     } else {
       setError("Please fill in all fields")
@@ -165,8 +175,8 @@ export default function LoginPage() {
                       type="text"
                       placeholder="Enter your Worker ID (e.g., WRK001)"
                       className="pl-10"
-                      value={workerFormData.workerId}
-                      onChange={(e) => setWorkerFormData({ ...workerFormData, workerId: e.target.value })}
+                      value={workerFormData.worker_id}
+                      onChange={(e) => setWorkerFormData({ ...workerFormData, worker_id: e.target.value })}
                       required
                     />
                   </div>
