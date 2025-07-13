@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ArrowLeft, Coins, CreditCard, CheckCircle, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { BASE_BACKEND_URL } from "../constants"
 
 export default function RedeemPage() {
   const [amount, setAmount] = useState("")
@@ -32,8 +33,15 @@ export default function RedeemPage() {
 
     setIsProcessing(true)
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+     const res = await fetch(`${BASE_BACKEND_URL}/dashboard/user/redeem/${amount}`,{
+          method : 'POST',
+          headers:{
+            'Content-Type' : 'application/json'
+          },
+        })
+    
+        const response = await res.json();
+        console.log(response)
 
     setIsProcessing(false)
     setShowSuccess(true)

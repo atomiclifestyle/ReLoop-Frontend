@@ -1,25 +1,48 @@
 "use client"
-
+import React, { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { ArrowLeft, User, Mail, ShoppingBag, Coins } from "lucide-react"
 import Link from "next/link"
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import { BASE_BACKEND_URL } from '../constants'
 
 // Mock user data
-const userData = {
-  id: "USR001",
-  name: "John Doe",
-  email: "john.doe@example.com",
-  bagsReturned: 45,
-  bagsCollected: 38,
-  totalCoinsEarned: 1250,
-  totalCoinsSpent: 800,
-  currentBalance: 450,
+export type UserProfile = {
+  id: number;
+  full_name: string;
+  email: string;
+  total_beg_returned: number;
+  total_beg_collected: number;
 }
 
+
+
 export default function ProfilePage() {
+  const { status, data } = useSession()
+  const router = useRouter()
+  const [user, setuser] = useState<UserProfile | null>(null)
+
+  useEffect(() => {
+    if (status == 'unauthenticated') return;
+    const fetchProfile = async () => {
+      const res = await fetch(`${BASE_BACKEND_URL}/dashboard/user/profile`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': `Bearer ${data?.access_token}`
+        }
+      })
+      const user: UserProfile = await res.json();
+      setuser(user)
+    }
+    fetchProfile()
+  }, [status, router])
+
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-4">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -44,18 +67,18 @@ export default function ProfilePage() {
               <Avatar className="w-24 h-24">
                 <AvatarImage src="/placeholder-user.jpg" />
                 <AvatarFallback className="text-2xl">
-                  {userData.name
+                  {user?.full_name
                     .split(" ")
                     .map((n) => n[0])
                     .join("")}
                 </AvatarFallback>
               </Avatar>
               <div className="space-y-2">
-                <h2 className="text-2xl font-bold">Welcome, {userData.name}</h2>
+                <h2 className="text-2xl font-bold">Welcome, {user?.full_name}</h2>
                 <div className="flex items-center gap-2"></div>
                 <p className="text-gray-600 flex items-center gap-2">
                   <User className="w-4 h-4" />
-                  User ID: {userData.id}
+                  User ID: {user?.id}
                 </p>
               </div>
             </div>
@@ -74,7 +97,7 @@ export default function ProfilePage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-600">Full Name</label>
-                <p className="text-lg font-semibold">{userData.name}</p>
+                <p className="text-lg font-semibold">{user?.full_name}</p>
               </div>
 
               <Separator />
@@ -83,7 +106,7 @@ export default function ProfilePage() {
                 <label className="text-sm font-medium text-gray-600">User Email</label>
                 <p className="text-lg flex items-center gap-2">
                   <Mail className="w-4 h-4 text-gray-400" />
-                  {userData.email}
+                  {user?.email}
                 </p>
               </div>
 
@@ -101,11 +124,11 @@ export default function ProfilePage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">{userData.bagsReturned}</div>
+                  <div className="text-2xl font-bold text-green-600">{user?.total_beg_returned}</div>
                   <p className="text-sm text-green-700">Number of Bags Returned</p>
                 </div>
                 <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600">{userData.bagsCollected}</div>
+                  <div className="text-2xl font-bold text-blue-600">{user?.total_beg_collected}</div>
                   <p className="text-sm text-blue-700">Number of Bags Collected</p>
                 </div>
               </div>
@@ -116,7 +139,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Coin Statistics */}
-        <Card>
+        {/* <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Coins className="w-5 h-5 text-yellow-600" />
@@ -144,7 +167,7 @@ export default function ProfilePage() {
               </div>
             </div>
           </CardContent>
-        </Card>
+        </Card> */}
 
         {/* Quick Actions */}
         <div className="flex gap-4 justify-center">

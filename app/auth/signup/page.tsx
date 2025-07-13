@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { User, Briefcase, Mail, Lock, Eye, EyeOff, UserPlus } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { BASE_BACKEND_URL } from "@/app/constants"
 
 export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -22,7 +23,7 @@ export default function SignupPage() {
   const router = useRouter()
 
   const [formData, setFormData] = useState({
-    name: "",
+    full_name: "",
     email: "",
     password: "",
     confirmPassword: "",
@@ -40,36 +41,21 @@ export default function SignupPage() {
       return
     }
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-
-    // Mock registration logic
-    if (formData.name && formData.email && formData.password) {
-      // For workers, simulate auto-generated Worker ID from database
-      if (userType === "worker") {
-        const mockWorkerId = `WRK${Math.floor(Math.random() * 1000)
-          .toString()
-          .padStart(3, "0")}`
-        setGeneratedWorkerId(mockWorkerId)
-        localStorage.setItem("workerId", mockWorkerId)
-      }
-
-      // Store user type in localStorage for demo purposes
-      localStorage.setItem("userType", userType)
-      localStorage.setItem("isAuthenticated", "true")
-      localStorage.setItem("userName", formData.name)
-      localStorage.setItem("userEmail", formData.email)
-
-      // Redirect based on user type
-      if (userType === "worker") {
-        router.push("/worker/dashboard")
-      } else {
-        router.push("/dashboard")
-      }
-    } else {
-      setError("Please fill in all fields")
+    if(!formData.email || !formData.email || !formData.password){
+      setError('Incomlete Details for Signing Up')
     }
 
+    // Simulate API call
+    const res = await fetch(`${BASE_BACKEND_URL}/auth/${userType}/signup`,{
+      method : 'POST',
+      headers:{
+        'Content-Type' : 'application/json'
+      },
+      body: JSON.stringify(formData)
+    })
+
+    const response = await res.json();
+    console.log(response)
     setIsLoading(false)
   }
 
@@ -104,8 +90,8 @@ export default function SignupPage() {
                       type="text"
                       placeholder="Enter your full name"
                       className="pl-10"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      value={formData.full_name}
+                      onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                       required
                     />
                   </div>
@@ -198,8 +184,8 @@ export default function SignupPage() {
                       type="text"
                       placeholder="Enter your full name"
                       className="pl-10"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      value={formData.full_name}
+                      onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                       required
                     />
                   </div>

@@ -5,14 +5,38 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Coins, ShoppingBag, User, History, ArrowRight } from "lucide-react"
 import Link from "next/link"
+import { useSession } from 'next-auth/react'
+import { useEffect, useState } from "react"
+import { BASE_BACKEND_URL } from "../constants"
+import { UserProfile } from "../profile/page"
 
-// Remove the unnecessary mock data fields and keep only what's in the diagram
-const userData = {
-  id: "USR001",
-  name: "John Doe",
-  email: "john.doe@example.com",
-  bagsReturned: 45,
-  bagsCollected: 38,
+
+
+
+type Purchase = {
+  id: string;
+  billNumber: string;
+  date: string;
+  bagsUsed: number;
+};
+
+type UserData = {
+  id: string;
+  name: string;
+  email: string;
+  bagsReturned: number;
+  bagsCollected: number;
+  totalCoins: number;
+  recentPurchases: Purchase[];
+};
+
+
+const userData: UserData = {
+  id: "4",
+  name: "",
+  email: "",
+  bagsReturned: 0,
+  bagsCollected: 0,
   totalCoins: 450,
   recentPurchases: [
     { id: "PUR001", billNumber: "WM-2024-001", date: "2024-01-15", bagsUsed: 3 },
@@ -22,6 +46,53 @@ const userData = {
 }
 
 export default function Dashboard() {
+  const [user, setuser] = useState<UserData>(userData)
+
+  type SessionData = {
+    access_token?: string;
+  };
+
+  const { status, data } = useSession() as { status: string; data: SessionData | null };
+
+
+ useEffect(() => {
+  if (status !== 'authenticated' || !data?.access_token) return;
+
+  const fetchProfile = async () => {
+    try {
+      const res = await fetch(`${BASE_BACKEND_URL}/dashboard/user/profile`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': `Bearer ${data.access_token}`,
+        },
+      });
+
+      if (!res.ok) {
+        console.error("Failed to fetch profile:", res.statusText);
+        return;
+      }
+
+      const response: UserProfile = await res.json();
+      console.log(response)
+
+      setuser((prev) => ({
+        ...prev,
+        id: String(response.id),
+        name: response.full_name,
+        email: response.email,
+        bagsReturned: response.total_beg_returned,
+        bagsCollected: response.total_beg_collected,
+      }));
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+    }
+  };
+
+  fetchProfile();
+}, [status, data]);
+
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-4">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -29,12 +100,12 @@ export default function Dashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">User Dashboard</h1>
-            <p className="text-gray-600">Welcome back, {userData.name}!</p>
+            <p className="text-gray-600">Welcome back, {user.name}!</p>
           </div>
           <div className="flex items-center gap-4">
             <Badge variant="secondary" className="text-lg px-4 py-2">
               <Coins className="w-5 h-5 mr-2" />
-              {userData.totalCoins} Coins
+              {user.totalCoins} Coins
             </Badge>
             <Link href="/profile">
               <Button variant="outline" size="sm">
@@ -53,7 +124,7 @@ export default function Dashboard() {
               <Coins className="h-4 w-4 text-yellow-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{userData.totalCoins}</div>
+              <div className="text-2xl font-bold">{user.totalCoins}</div>
               <p className="text-xs text-muted-foreground">Available for redemption</p>
             </CardContent>
           </Card>
@@ -64,7 +135,7 @@ export default function Dashboard() {
               <ShoppingBag className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{userData.bagsReturned}</div>
+              <div className="text-2xl font-bold">{user.bagsReturned}</div>
               <p className="text-xs text-muted-foreground">Eco-friendly returns</p>
             </CardContent>
           </Card>
@@ -75,7 +146,7 @@ export default function Dashboard() {
               <ShoppingBag className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{userData.bagsCollected}</div>
+              <div className="text-2xl font-bold">{user.bagsCollected}</div>
               <p className="text-xs text-muted-foreground">From purchases</p>
             </CardContent>
           </Card>
@@ -86,7 +157,7 @@ export default function Dashboard() {
               <User className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{userData.id}</div>
+              <div className="text-2xl font-bold">{user.id}</div>
               <p className="text-xs text-muted-foreground">Your unique identifier</p>
             </CardContent>
           </Card>
@@ -104,7 +175,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {userData.recentPurchases.map((purchase) => (
+                {user.recentPurchases.map((purchase) => (
                   <div key={purchase.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="space-y-1">
                       <p className="font-medium">Bill Number: {purchase.billNumber}</p>
@@ -161,15 +232,15 @@ export default function Dashboard() {
                   <Avatar>
                     <AvatarImage src="/placeholder-user.jpg" />
                     <AvatarFallback>
-                      {userData.name
+                      {user.name
                         .split(" ")
                         .map((n) => n[0])
                         .join("")}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium">{userData.name}</p>
-                    <p className="text-sm text-gray-600">{userData.email}</p>
+                    <p className="font-medium">{user.name}</p>
+                    <p className="text-sm text-gray-600">{user.email}</p>
                   </div>
                 </div>
               </div>
