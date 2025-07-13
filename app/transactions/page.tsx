@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,28 +8,71 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ArrowLeft, TrendingUp, TrendingDown, Calendar, Coins } from "lucide-react"
 import Link from "next/link"
+import { useSession } from 'next-auth/react'
+import { BASE_BACKEND_URL } from "../constants"
+
+
+type EarningTransaction = {
+  id: string;
+  bagId: string;
+  returnDate: string; // Use `Date` if you plan to parse it
+  coinsEarned: number;
+};
+
+type SpendingTransaction = {
+  id: string;
+  transactionDate: string; // Use `Date` if you plan to parse it
+  coinsSpent: number;
+};
+
+type TransactionsType = {
+  earningTransactions: EarningTransaction[],
+  spendingTransactions: SpendingTransaction[]
+}
+
 
 // Mock transaction data
-const earningTransactions = [
-  { id: "TXN001", bagId: "BAG001", returnDate: "2024-01-15", coinsEarned: 30 },
-  { id: "TXN002", bagId: "BAG002", returnDate: "2024-01-14", coinsEarned: 20 },
-  { id: "TXN003", bagId: "BAG003", returnDate: "2024-01-13", coinsEarned: 50 },
-  { id: "TXN004", bagId: "BAG004", returnDate: "2024-01-12", coinsEarned: 40 },
-  { id: "TXN005", bagId: "BAG005", returnDate: "2024-01-11", coinsEarned: 25 },
-]
+const defaulttransaction = {
+  earningTransactions: [
+    { id: "TXN001", bagId: "BAG001", returnDate: "2024-01-15", coinsEarned: 30 },
+    { id: "TXN002", bagId: "BAG002", returnDate: "2024-01-14", coinsEarned: 20 },
+    { id: "TXN003", bagId: "BAG003", returnDate: "2024-01-13", coinsEarned: 50 },
+    { id: "TXN004", bagId: "BAG004", returnDate: "2024-01-12", coinsEarned: 40 },
+    { id: "TXN005", bagId: "BAG005", returnDate: "2024-01-11", coinsEarned: 25 },
+  ],
+  spendingTransactions: [
+    { id: "TXN101", transactionDate: "2024-01-10", coinsSpent: 100 },
+    { id: "TXN102", transactionDate: "2024-01-08", coinsSpent: 75 },
+    { id: "TXN103", transactionDate: "2024-01-05", coinsSpent: 150 },
+    { id: "TXN104", transactionDate: "2024-01-03", coinsSpent: 50 },
+  ]
 
-const spendingTransactions = [
-  { id: "TXN101", transactionDate: "2024-01-10", coinsSpent: 100 },
-  { id: "TXN102", transactionDate: "2024-01-08", coinsSpent: 75 },
-  { id: "TXN103", transactionDate: "2024-01-05", coinsSpent: 150 },
-  { id: "TXN104", transactionDate: "2024-01-03", coinsSpent: 50 },
-]
+}
 
 export default function TransactionsPage() {
+  const {status , data} = useSession();
+  const [transaction, settransaction] = useState<TransactionsType>(defaulttransaction)
+
+  useEffect(()=>{
+    if(status !== 'authenticated' || !data?.access_token) return;
+    const fetchTransaction = async() =>{
+      const res = await fetch(`${BASE_BACKEND_URL}/dashboard/user/coin_transactions`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': `Bearer ${data.access_token}`,
+        },
+      })
+      const response = await res.json();
+      console.log(response)
+    }
+    //fetchTransaction()
+  },[status , data])
+
   const [activeTab, setActiveTab] = useState("earn")
 
-  const totalEarned = earningTransactions.reduce((sum, tx) => sum + tx.coinsEarned, 0)
-  const totalSpent = spendingTransactions.reduce((sum, tx) => sum + tx.coinsSpent, 0)
+  const totalEarned = transaction.earningTransactions.reduce((sum, tx) => sum + tx.coinsEarned, 0)
+  const totalSpent = transaction.spendingTransactions.reduce((sum, tx) => sum + tx.coinsSpent, 0)
   const netBalance = Math.max(totalEarned - totalSpent, 0) // Ensure non-negative
 
   return (
@@ -58,7 +101,7 @@ export default function TransactionsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">+{totalEarned}</div>
-              <p className="text-xs text-muted-foreground">From {earningTransactions.length} transactions</p>
+              <p className="text-xs text-muted-foreground">From {transaction.earningTransactions.length} transactions</p>
             </CardContent>
           </Card>
 
@@ -69,7 +112,7 @@ export default function TransactionsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-red-600">-{totalSpent}</div>
-              <p className="text-xs text-muted-foreground">From {spendingTransactions.length} redemptions</p>
+              <p className="text-xs text-muted-foreground">From {transaction.spendingTransactions.length} redemptions</p>
             </CardContent>
           </Card>
 
@@ -96,11 +139,11 @@ export default function TransactionsPage() {
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="earn" className="flex items-center gap-2">
                   <TrendingUp className="w-4 h-4" />
-                  Earn ({earningTransactions.length})
+                  Earn ({transaction.earningTransactions.length})
                 </TabsTrigger>
                 <TabsTrigger value="redeem" className="flex items-center gap-2">
                   <TrendingDown className="w-4 h-4" />
-                  Redeem ({spendingTransactions.length})
+                  Redeem ({transaction.spendingTransactions.length})
                 </TabsTrigger>
               </TabsList>
 
@@ -116,7 +159,7 @@ export default function TransactionsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {earningTransactions.map((transaction) => (
+                      {transaction.earningTransactions.map((transaction) => (
                         <TableRow key={transaction.id}>
                           <TableCell className="font-medium">{transaction.id}</TableCell>
                           <TableCell>{transaction.bagId}</TableCell>
@@ -149,7 +192,7 @@ export default function TransactionsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {spendingTransactions.map((transaction) => (
+                      {transaction.spendingTransactions.map((transaction) => (
                         <TableRow key={transaction.id}>
                           <TableCell className="font-medium">{transaction.id}</TableCell>
                           <TableCell>
