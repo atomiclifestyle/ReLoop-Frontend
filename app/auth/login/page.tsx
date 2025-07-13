@@ -41,19 +41,23 @@ export default function LoginPage() {
       const res = await signIn('user_login', {
         redirect: false,
         email: userFormData.email,
-        password: userFormData.password
+        password: userFormData.password,
+        userType : userType
       })
       if (res?.ok) {
         console.log(res)
+        router.push('/profile')
       }
     } else if (userType == 'worker') {
       const res = await signIn('worker_login', {
         redirect: false,
         worker_id: workerFormData.worker_id,
-        password: workerFormData.password
+        password: workerFormData.password,
+        userType : userType
       })
       if (res?.ok) {
         console.log(res)
+        router.push('/profile')
       }
     }else{
       setError('Invalid userType')
