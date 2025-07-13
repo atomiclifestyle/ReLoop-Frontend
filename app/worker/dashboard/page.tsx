@@ -1,5 +1,6 @@
 "use client"
 
+import React, { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,14 +9,32 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { QrCode, Search, User, Calendar, AlertTriangle, LogOut } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useSession } from 'next-auth/react'
+import { BASE_BACKEND_URL } from '@/app/constants'
 
-// Mock worker data
-const workerData = {
+
+type ScanRecord = {
+  id: string;
+  bagId: string;
+  scanMode: "Checkout" | "Recycle";
+  scanDate: string;
+};
+
+type WorkerDataType = {
+  id: string;
+  full_name: string;
+  email: string;
+  total_beg_scanned: number;
+  total_fault_scan: number;
+  recentScans: ScanRecord[];
+};
+
+const workerData: WorkerDataType = {
   id: "WRK001",
-  name: "Sarah Johnson",
+  full_name: "Sarah Johnson",
   email: "sarah.johnson@store.com",
-  bagsScanned: 234,
-  faultScans: 3,
+  total_beg_scanned: 234,
+  total_fault_scan: 3,
   recentScans: [
     { id: "SCN001", bagId: "BAG001", scanMode: "Checkout", scanDate: "2024-01-15" },
     { id: "SCN002", bagId: "BAG002", scanMode: "Recycle", scanDate: "2024-01-15" },
@@ -27,6 +46,32 @@ const workerData = {
 
 export default function WorkerDashboard() {
   const router = useRouter()
+  const { status, data } = useSession()
+  const [worker, setworker] = useState<WorkerDataType>(workerData)
+
+  useEffect(() => {
+    if (status == 'unauthenticated') return;
+    const fetchProfile = async () => {
+      const res = await fetch(`${BASE_BACKEND_URL}/dashboard/worker/profile`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': `Bearer ${data?.access_token}`
+        }
+      })
+      const user = await res.json();
+      setworker((prev) => ({
+        ...prev,
+        id: user.id,
+        name: user.fullname,
+        email: user.email,
+        total_beg_scanned: user.total_beg_scanned,
+        total_fault_scan: user.total_fault_scan
+      }))
+    }
+    fetchProfile()
+  }, [status])
+
 
   const handleLogout = () => {
     localStorage.removeItem("userType")
@@ -41,7 +86,7 @@ export default function WorkerDashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Worker Dashboard</h1>
-            <p className="text-gray-600">Welcome back, {workerData.name}!</p>
+            <p className="text-gray-600">Welcome back, {worker.full_name}!</p>
           </div>
           <div className="flex items-center gap-4">
             <Link href="/worker/profile">
@@ -65,7 +110,7 @@ export default function WorkerDashboard() {
               <QrCode className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{workerData.bagsScanned}</div>
+              <div className="text-2xl font-bold">{worker.total_beg_scanned}</div>
               <p className="text-xs text-muted-foreground">Bags scanned today</p>
             </CardContent>
           </Card>
@@ -76,7 +121,7 @@ export default function WorkerDashboard() {
               <AlertTriangle className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{workerData.faultScans}</div>
+              <div className="text-2xl font-bold text-red-600">{worker.total_fault_scan}</div>
               <p className="text-xs text-muted-foreground">Issues detected</p>
             </CardContent>
           </Card>
@@ -87,7 +132,7 @@ export default function WorkerDashboard() {
               <User className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{workerData.id}</div>
+              <div className="text-2xl font-bold">{worker.id}</div>
               <p className="text-xs text-muted-foreground">Your identifier</p>
             </CardContent>
           </Card>
@@ -99,7 +144,7 @@ export default function WorkerDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">
-                {Math.round(((workerData.bagsScanned - workerData.faultScans) / workerData.bagsScanned) * 100)}%
+                {Math.round(((worker.total_beg_scanned - worker.total_fault_scan) / worker.total_beg_scanned) * 100)}%
               </div>
               <p className="text-xs text-muted-foreground">Successful scans</p>
             </CardContent>
@@ -128,7 +173,7 @@ export default function WorkerDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {workerData.recentScans.map((scan) => (
+                    {worker.recentScans.map((scan) => (
                       <TableRow key={scan.id}>
                         <TableCell className="font-medium">{scan.bagId}</TableCell>
                         <TableCell>
@@ -187,18 +232,15 @@ export default function WorkerDashboard() {
               <div className="mt-6 p-4 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-3">
                   <Avatar>
-                    <AvatarImage src="/placeholder-worker.jpg" />
+                    <AvatarImage src="https://png.pngtree.com/png-vector/20220901/ourmid/pngtree-male-company-employee-avatar-icon-wearing-a-necktie-png-image_6133877.png" />
                     <AvatarFallback>
-                      {workerData.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
+                      {worker.full_name}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium">{workerData.name}</p>
-                    <p className="text-sm text-gray-600">{workerData.email}</p>
-                    <p className="text-xs text-gray-500">ID: {workerData.id}</p>
+                    <p className="font-medium">{worker.full_name}</p>
+                    <p className="text-sm text-gray-600">{worker.email}</p>
+                    <p className="text-xs text-gray-500">ID: {worker.id}</p>
                   </div>
                 </div>
               </div>
