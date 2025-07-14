@@ -1,130 +1,164 @@
-"use client"
+"use client";
 
-import type React from "react"
-
-import { useState, useRef } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, QrCode, ShoppingCart, Recycle, CheckCircle, Camera, User } from "lucide-react"
-import Link from "next/link"
+import type React from "react";
+import { useState, useRef, useEffect } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ArrowLeft, QrCode, ShoppingCart, Recycle, CheckCircle, Camera, User } from "lucide-react";
+import Link from "next/link";
+import jsQR from "jsqr";
+import { useSession } from "next-auth/react";
 
 export default function ScanPage() {
-  const [scanMode, setScanMode] = useState<"checkout" | "recycle">("checkout")
-  const [userId, setUserId] = useState("")
-  const [isScanning, setIsScanning] = useState(false)
-  const [scanResult, setScanResult] = useState<string | null>(null)
-  const [showSuccess, setShowSuccess] = useState(false)
-  const [error, setError] = useState("")
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [stream, setStream] = useState<MediaStream | null>(null)
-  const [showCamera, setShowCamera] = useState(false)
+  const [scanMode, setScanMode] = useState<"checkout" | "recycle">("checkout");
+  const [userId, setUserId] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<string | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [error, setError] = useState("");
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { data: session } = useSession();
+
+  // Assign stream to video element when stream changes
+  useEffect(() => {
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
 
   const startCamera = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" }, // Use back camera if available
-      })
-      setStream(mediaStream)
-      setShowCamera(true)
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream
-      }
+        video: { facingMode: "environment" },
+      });
+      setStream(mediaStream);
+      setShowCamera(true);
     } catch (err) {
-      setError("Unable to access camera. Please check permissions.")
+      setError("Unable to access camera. Please check permissions.");
     }
-  }
+  };
 
   const stopCamera = () => {
     if (stream) {
-      stream.getTracks().forEach((track) => track.stop())
-      setStream(null)
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
     }
-    setShowCamera(false)
-  }
+    setShowCamera(false);
+  };
 
   const capturePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return
+    if (!videoRef.current || !canvasRef.current) return;
 
-    const canvas = canvasRef.current
-    const video = videoRef.current
-    const context = canvas.getContext("2d")
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    const context = canvas.getContext("2d");
 
     if (context) {
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      context.drawImage(video, 0, 0)
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0);
 
-      // Convert to blob and send to backend
-      canvas.toBlob(
-        async (blob) => {
-          if (blob) {
-            await sendQRToBackend(blob)
-          }
-        },
-        "image/jpeg",
-        0.8,
-      )
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      });
+
+      const base64Image = canvas.toDataURL("image/png", 1.0);
+
+      if (code) {
+        sendQRToBackend(base64Image, code.data);
+      } else {
+        setError("No QR code found in the image. Please try again.");
+      }
     }
-  }
+  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
+    const file = event.target.files?.[0];
     if (file) {
-      await sendQRToBackend(file)
-    }
-  }
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        if (context) {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          context.drawImage(img, 0, 0);
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+          });
 
-  const sendQRToBackend = async (imageBlob: Blob) => {
+          const base64Image = canvas.toDataURL("image/png", 1.0);
+          if (code) {
+            sendQRToBackend(base64Image, code.data);
+          } else {
+            setError("No QR code found in the uploaded image.");
+          }
+          URL.revokeObjectURL(img.src);
+        }
+      };
+    }
+  };
+
+  const sendQRToBackend = async (base64Image: string, qrData?: string) => {
     if (!userId.trim()) {
-      setError("Please enter User ID before scanning")
-      return
+      setError("Please enter User ID before scanning");
+      return;
     }
 
-    setIsScanning(true)
-    setError("")
-    setScanResult(null)
+    setIsScanning(true);
+    setError("");
+    setScanResult(null);
 
     try {
-      const formData = new FormData()
-      formData.append("qr_image", imageBlob)
-      formData.append("user_id", userId)
-      formData.append("scan_mode", scanMode)
-      formData.append("worker_id", "WRK001") // This would come from auth context
+      const response = await fetch("https://reloop.onrender.com/dashboard/worker/scan_qr", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token || ""}`,
+        },
+        body: JSON.stringify({
+          uploaded_qr: base64Image,
+          user_id: userId,
+          scan_mode: scanMode,
+          worker_id: "1",
+        }),
+      });
 
-      // Simulate API call to backend
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      if (!response.ok) {
+        throw new Error(`Failed to process QR code: ${response.statusText}`);
+      }
 
-      // Mock successful response
-      const mockBagId = `BAG${Math.floor(Math.random() * 1000)
-        .toString()
-        .padStart(3, "0")}`
-      setScanResult(mockBagId)
-      setShowSuccess(true)
-      stopCamera()
+      const result = await response.json();
+      setScanResult(qrData || result.bagId || `BAG${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`);
+      setShowSuccess(true);
+      stopCamera();
 
-      // Hide success message after 3 seconds
       setTimeout(() => {
-        setShowSuccess(false)
-        setScanResult(null)
-        setUserId("")
-      }, 3000)
+        setShowSuccess(false);
+        setScanResult(null);
+        setUserId("");
+      }, 3000);
     } catch (err) {
-      setError("Failed to process QR code. Please try again.")
+      setError("Failed to process QR code. Please try again.");
     } finally {
-      setIsScanning(false)
+      setIsScanning(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
       <div className="max-w-2xl mx-auto space-y-6">
-        {/* Header */}
         <div className="flex items-center gap-4">
           <Link href="/worker/dashboard">
             <Button variant="outline" size="sm">
@@ -138,7 +172,6 @@ export default function ScanPage() {
           </div>
         </div>
 
-        {/* User ID Input */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -163,7 +196,6 @@ export default function ScanPage() {
           </CardContent>
         </Card>
 
-        {/* Mode Selection */}
         <Card>
           <CardHeader>
             <CardTitle>Select Scan Mode</CardTitle>
@@ -193,7 +225,6 @@ export default function ScanPage() {
           </CardContent>
         </Card>
 
-        {/* Current Mode Info */}
         <Alert>
           <AlertDescription>
             <strong>Current Mode:</strong>{" "}
@@ -213,7 +244,6 @@ export default function ScanPage() {
           </Alert>
         )}
 
-        {/* QR Scanner */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -222,7 +252,6 @@ export default function ScanPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Camera View */}
             {showCamera && (
               <div className="space-y-4">
                 <div className="relative aspect-square max-w-sm mx-auto bg-black rounded-lg overflow-hidden">
@@ -241,7 +270,6 @@ export default function ScanPage() {
               </div>
             )}
 
-            {/* Success State */}
             {showSuccess && scanResult && (
               <div className="text-center space-y-4">
                 <CheckCircle className="w-16 h-16 text-green-600 mx-auto" />
@@ -254,7 +282,6 @@ export default function ScanPage() {
               </div>
             )}
 
-            {/* Scanner Options */}
             {!showCamera && !showSuccess && (
               <div className="space-y-4">
                 <div className="aspect-square max-w-sm mx-auto bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
@@ -300,7 +327,6 @@ export default function ScanPage() {
               </div>
             )}
 
-            {/* Hidden canvas for image processing */}
             <canvas ref={canvasRef} className="hidden" />
 
             {scanResult && showSuccess && (
@@ -316,7 +342,6 @@ export default function ScanPage() {
           </CardContent>
         </Card>
 
-        {/* Instructions */}
         <Card>
           <CardHeader>
             <CardTitle>Scanning Instructions</CardTitle>
@@ -365,5 +390,5 @@ export default function ScanPage() {
         </Card>
       </div>
     </div>
-  )
+  );
 }

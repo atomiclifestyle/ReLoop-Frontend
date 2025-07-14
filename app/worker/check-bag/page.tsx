@@ -1,89 +1,141 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, QrCode, Camera, Calendar, User, AlertTriangle } from "lucide-react"
-import Link from "next/link"
+import { useState, useRef, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ArrowLeft, QrCode, Camera, Calendar, User, AlertTriangle } from "lucide-react";
+import Link from "next/link";
+import jsQR from "jsqr";
+import { useSession } from "next-auth/react";
 
-// Mock bag history data
-const mockBagHistory = {
-  bagId: "BAG123",
-  status: "Active",
-  totalScans: 8,
-  faultCount: 1,
-  transactions: [
-    {
-      id: "TXN001",
-      date: "2024-01-15",
-      time: "14:30",
-      action: "Checkout",
-      workerId: "WRK001",
-      workerName: "Sarah Johnson",
-      status: "Success",
-    },
-    {
-      id: "TXN002",
-      date: "2024-01-15",
-      time: "16:45",
-      action: "Recycle",
-      workerId: "WRK002",
-      workerName: "Mike Chen",
-      status: "Success",
-    },
-    {
-      id: "TXN003",
-      date: "2024-01-14",
-      time: "10:20",
-      action: "Checkout",
-      workerId: "WRK001",
-      workerName: "Sarah Johnson",
-      status: "Success",
-    },
-    {
-      id: "TXN004",
-      date: "2024-01-14",
-      time: "15:30",
-      action: "Recycle",
-      workerId: "WRK003",
-      workerName: "Emma Davis",
-      status: "Fault",
-    },
-    {
-      id: "TXN005",
-      date: "2024-01-13",
-      time: "09:15",
-      action: "Checkout",
-      workerId: "WRK002",
-      workerName: "Mike Chen",
-      status: "Success",
-    },
-  ],
+// Interface for bag history data (replacing mock structure)
+interface Transaction {
+  id: string;
+  date: string;
+  time: string;
+  action: "Checkout" | "Recycle";
+  workerId: string;
+  workerName: string;
+  status: "Success" | "Fault";
+}
+
+interface BagHistory {
+  bagId: string;
+  status: string;
+  totalScans: number;
+  faultCount: number;
+  transactions: Transaction[];
 }
 
 export default function CheckBagPage() {
-  const [isScanning, setIsScanning] = useState(false)
-  const [bagHistory, setBagHistory] = useState<typeof mockBagHistory | null>(null)
-  const [showScanner, setShowScanner] = useState(true)
+  const [isScanning, setIsScanning] = useState(false);
+  const [bagHistory, setBagHistory] = useState<BagHistory | null>(null);
+  const [showScanner, setShowScanner] = useState(true);
+  const [showCamera, setShowCamera] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [error, setError] = useState("");
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { data: session } = useSession();
 
-  const handleScan = async () => {
-    setIsScanning(true)
+  // Assign stream to video element when stream changes
+  useEffect(() => {
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
 
-    // Simulate QR code scanning
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      setStream(mediaStream);
+      setShowCamera(true);
+      setError("");
+    } catch (err) {
+      setError("Unable to access camera. Please check permissions.");
+      setIsScanning(false);
+    }
+  };
 
-    setBagHistory(mockBagHistory)
-    setIsScanning(false)
-    setShowScanner(false)
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
+    setShowCamera(false);
+  };
+
+  const capturePhoto = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    const context = canvas.getContext("2d");
+
+    if (context) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0);
+
+      // Decode QR code using jsQR
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      });
+
+      if (code) {
+        // Send decoded QR data to backend
+        await handleScan(code.data);
+      } else {
+        setError("No QR code found in the image. Please try again.");
+        setIsScanning(false);
+      }
+    }
+  };
+
+const handleScan = async (bagId: string) => {
+  setIsScanning(true);
+  setError("");
+
+  try {
+    const formData = new FormData();
+    formData.append("uploaded_qr", bagId); // Send the decoded QR code data as a string
+
+    const response = await fetch("https://reloop.onrender.com/dashboard/worker/about_bag", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session?.access_token || ""}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch bag history: ${response.statusText}`);
+    }
+
+    const result: BagHistory = await response.json();
+    setBagHistory(result);
+    setShowScanner(false);
+    setShowCamera(false);
+    stopCamera();
+  } catch (err) {
+    setError("Failed to fetch bag history. Please try again.");
+  } finally {
+    setIsScanning(false);
   }
+};
 
   const resetScan = () => {
-    setBagHistory(null)
-    setShowScanner(true)
-  }
+    setBagHistory(null);
+    setShowScanner(true);
+    setError("");
+    stopCamera();
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
@@ -114,36 +166,53 @@ export default function CheckBagPage() {
                 <p className="text-sm text-gray-600">Scan the QR code on the bag to view its complete history</p>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Mock QR Scanner Display */}
-                <div className="aspect-square max-w-sm mx-auto bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
-                  {isScanning ? (
-                    <div className="text-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                      <p className="text-gray-600">Scanning QR Code...</p>
+                {showCamera ? (
+                  <div className="space-y-4">
+                    <div className="relative aspect-square max-w-sm mx-auto bg-black rounded-lg overflow-hidden">
+                      <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 border-2 border-white border-dashed m-8 rounded-lg"></div>
                     </div>
-                  ) : (
-                    <div className="text-center">
-                      <Camera className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-600">Position bag QR code in the frame</p>
+                    <div className="flex gap-2 justify-center">
+                      <Button onClick={capturePhoto} disabled={isScanning}>
+                        <Camera className="w-4 h-4 mr-2" />
+                        Capture QR Code
+                      </Button>
+                      <Button variant="outline" onClick={stopCamera} disabled={isScanning}>
+                        Cancel
+                      </Button>
                     </div>
-                  )}
-                </div>
-
-                <Button onClick={handleScan} disabled={isScanning} className="w-full" size="lg">
-                  {isScanning ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Scanning...
-                    </>
-                  ) : (
-                    <>
-                      <QrCode className="w-5 h-5 mr-2" />
-                      Scan Bag
-                    </>
-                  )}
-                </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="aspect-square max-w-sm mx-auto bg-gray-100 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
+                      {isScanning ? (
+                        <div className="text-center">
+                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                          <p className="text-gray-600">Scanning QR Code...</p>
+                        </div>
+                      ) : (
+                        <div className="text-center">
+                          <Camera className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                          <p className="text-gray-600">Position bag QR code in the frame</p>
+                        </div>
+                      )}
+                    </div>
+                    <Button onClick={startCamera} disabled={isScanning} className="w-full" size="lg">
+                      <Camera className="w-5 h-5 mr-2" />
+                      Open Camera
+                    </Button>
+                  </div>
+                )}
+                <canvas ref={canvasRef} className="hidden" />
               </CardContent>
             </Card>
+
+            {/* Error Alert */}
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
             {/* Instructions */}
             <Alert>
@@ -169,7 +238,9 @@ export default function CheckBagPage() {
                   <Calendar className="w-5 h-5" />
                   Complete Bag Transaction History
                 </CardTitle>
-                <p className="text-sm text-gray-600">The whole bag transaction history is shown below</p>
+                <p className="text-sm text-gray-600">
+                  Bag ID: {bagHistory.bagId} | Status: {bagHistory.status} | Total Scans: {bagHistory.totalScans} | Faults: {bagHistory.faultCount}
+                </p>
               </CardHeader>
               <CardContent>
                 <div className="rounded-md border">
@@ -230,7 +301,7 @@ export default function CheckBagPage() {
                               )}
                               {transaction.status}
                             </Badge>
-                          </TableCell>
+                            </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -253,5 +324,5 @@ export default function CheckBagPage() {
         )}
       </div>
     </div>
-  )
+  );
 }
