@@ -10,10 +10,14 @@ import { ArrowLeft, Coins, CreditCard, CheckCircle, AlertCircle } from "lucide-r
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { BASE_BACKEND_URL } from "../constants"
-import {useSession} from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 
 export default function RedeemPage() {
-  const {status , data} = useSession()
+   type SessionData = {
+    access_token?: string;
+  };
+
+  const { status, data } = useSession() as { status: string; data: SessionData | null };
   const [amount, setAmount] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
@@ -54,6 +58,9 @@ export default function RedeemPage() {
   }
 
   useEffect(() => {
+    if (status === 'authenticated' || availableCoins === null) {
+      return; // Or show a loading skeleton/spinner
+    }
     const fetchCoins = async () => {
       const res = await fetch(`${BASE_BACKEND_URL}/dashboard/user/coin_info`, {
         method: 'GET',

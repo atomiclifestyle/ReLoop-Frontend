@@ -34,17 +34,17 @@ type TransactionsType = {
 // Mock transaction data
 const defaulttransaction = {
   earningTransactions: [
-    { id: "TXN001", bagId: "BAG001", returnDate: "2024-01-15", coinsEarned: 30 },
-    { id: "TXN002", bagId: "BAG002", returnDate: "2024-01-14", coinsEarned: 20 },
-    { id: "TXN003", bagId: "BAG003", returnDate: "2024-01-13", coinsEarned: 50 },
-    { id: "TXN004", bagId: "BAG004", returnDate: "2024-01-12", coinsEarned: 40 },
-    { id: "TXN005", bagId: "BAG005", returnDate: "2024-01-11", coinsEarned: 25 },
+    // { id: "TXN001", bagId: "BAG001", returnDate: "2024-01-15", coinsEarned: 30 },
+    // { id: "TXN002", bagId: "BAG002", returnDate: "2024-01-14", coinsEarned: 20 },
+    // { id: "TXN003", bagId: "BAG003", returnDate: "2024-01-13", coinsEarned: 50 },
+    // { id: "TXN004", bagId: "BAG004", returnDate: "2024-01-12", coinsEarned: 40 },
+    // { id: "TXN005", bagId: "BAG005", returnDate: "2024-01-11", coinsEarned: 25 },
   ],
   spendingTransactions: [
-    { id: "TXN101", transactionDate: "2024-01-10", coinsSpent: 100 },
-    { id: "TXN102", transactionDate: "2024-01-08", coinsSpent: 75 },
-    { id: "TXN103", transactionDate: "2024-01-05", coinsSpent: 150 },
-    { id: "TXN104", transactionDate: "2024-01-03", coinsSpent: 50 },
+    // { id: "TXN101", transactionDate: "2024-01-10", coinsSpent: 100 },
+    // { id: "TXN102", transactionDate: "2024-01-08", coinsSpent: 75 },
+    // { id: "TXN103", transactionDate: "2024-01-05", coinsSpent: 150 },
+    // { id: "TXN104", transactionDate: "2024-01-03", coinsSpent: 50 },
   ]
 
 }
@@ -66,7 +66,7 @@ export default function TransactionsPage() {
       const response = await res.json();
       console.log(response)
     }
-    //fetchTransaction()
+    fetchTransaction()
   },[status , data])
 
   const [activeTab, setActiveTab] = useState("earn")
