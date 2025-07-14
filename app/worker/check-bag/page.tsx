@@ -4,30 +4,20 @@ import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, QrCode, Camera, Calendar, User, AlertTriangle } from "lucide-react";
+import { ArrowLeft, QrCode, Camera, CheckCircle } from "lucide-react";
 import Link from "next/link";
 import jsQR from "jsqr";
 import { useSession } from "next-auth/react";
 
-// Interface for bag history data (replacing mock structure)
-interface Transaction {
-  id: string;
-  date: string;
-  time: string;
-  action: "Checkout" | "Recycle";
-  workerId: string;
-  workerName: string;
-  status: "Success" | "Fault";
-}
-
+// Interface for bag history data (updated to match new response format)
 interface BagHistory {
-  bagId: string;
-  status: string;
-  totalScans: number;
-  faultCount: number;
-  transactions: Transaction[];
+  user_id: number;
+  number_of_time_used: number;
+  worker_id: number;
+  last_scan_date: string;
+  id: number;
+  last_scan_type: "Checkout" | "Recycle";
 }
 
 export default function CheckBagPage() {
@@ -39,6 +29,7 @@ export default function CheckBagPage() {
   const [error, setError] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: session } = useSession();
 
   // Assign stream to video element when stream changes
@@ -88,9 +79,14 @@ export default function CheckBagPage() {
         inversionAttempts: "dontInvert",
       });
 
+      // Convert canvas to Blob and then to File
       if (code) {
-        // Send decoded QR data to backend
-        await handleScan(code.data);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const file = new File([blob], "qr_code.png", { type: "image/png" });
+            handleScan(file, code.data);
+          }
+        }, "image/png", 1.0);
       } else {
         setError("No QR code found in the image. Please try again.");
         setIsScanning(false);
@@ -98,37 +94,65 @@ export default function CheckBagPage() {
     }
   };
 
-const handleScan = async (bagId: string) => {
-  setIsScanning(true);
-  setError("");
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        if (context) {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          context.drawImage(img, 0, 0);
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: "dontInvert",
+          });
 
-  try {
-    const formData = new FormData();
-    formData.append("uploaded_qr", bagId); // Send the decoded QR code data as a string
-
-    const response = await fetch("https://reloop.onrender.com/dashboard/worker/about_bag", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session?.access_token || ""}`,
-      },
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch bag history: ${response.statusText}`);
+          if (code) {
+            handleScan(file, code.data); // Pass the original file
+          } else {
+            setError("No QR code found in the uploaded image.");
+          }
+          URL.revokeObjectURL(img.src);
+        }
+      };
     }
+  };
 
-    const result: BagHistory = await response.json();
-    setBagHistory(result);
-    setShowScanner(false);
-    setShowCamera(false);
-    stopCamera();
-  } catch (err) {
-    setError("Failed to fetch bag history. Please try again.");
-  } finally {
-    setIsScanning(false);
-  }
-};
+  const handleScan = async (imageFile: File, qrData?: string) => {
+    setIsScanning(true);
+    setError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("uploaded_qr", imageFile); // Send the image as a File
+
+      const response = await fetch("https://reloop.onrender.com/dashboard/worker/about_bag", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session?.access_token || ""}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch bag history: ${response.statusText}`);
+      }
+
+      const result: BagHistory = await response.json();
+      setBagHistory(result);
+      setShowScanner(false);
+      setShowCamera(false);
+      stopCamera();
+    } catch (err) {
+      setError("Failed to fetch bag history. Please try again.");
+    } finally {
+      setIsScanning(false);
+    }
+  };
 
   const resetScan = () => {
     setBagHistory(null);
@@ -150,7 +174,7 @@ const handleScan = async (bagId: string) => {
           </Link>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Check Bag</h1>
-            <p className="text-gray-600">Scan a bag to view its complete transaction history</p>
+            <p className="text-gray-600">Scan a bag to view its details</p>
           </div>
         </div>
 
@@ -163,7 +187,7 @@ const handleScan = async (bagId: string) => {
                   <QrCode className="w-5 h-5" />
                   Scan Bag QR Code
                 </CardTitle>
-                <p className="text-sm text-gray-600">Scan the QR code on the bag to view its complete history</p>
+                <p className="text-sm text-gray-600">Scan or upload the QR code on the bag to view its details</p>
               </CardHeader>
               <CardContent className="space-y-6">
                 {showCamera ? (
@@ -188,19 +212,40 @@ const handleScan = async (bagId: string) => {
                       {isScanning ? (
                         <div className="text-center">
                           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                          <p className="text-gray-600">Scanning QR Code...</p>
+                          <p className="text-gray-600">Processing QR Code...</p>
                         </div>
                       ) : (
                         <div className="text-center">
                           <Camera className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                          <p className="text-gray-600">Position bag QR code in the frame</p>
+                          <p className="text-gray-600">Position bag QR code in the frame or upload an image</p>
                         </div>
                       )}
                     </div>
-                    <Button onClick={startCamera} disabled={isScanning} className="w-full" size="lg">
-                      <Camera className="w-5 h-5 mr-2" />
-                      Open Camera
-                    </Button>
+                    <div className="grid grid-cols-1 gap-3">
+                      <Button onClick={startCamera} disabled={isScanning} className="w-full" size="lg">
+                        <Camera className="w-5 h-5 mr-2" />
+                        Open Camera
+                      </Button>
+                      <div className="relative">
+                        <Button
+                          variant="outline"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isScanning}
+                          className="w-full"
+                          size="lg"
+                        >
+                          <QrCode className="w-5 h-5 mr-2" />
+                          Upload QR Image
+                        </Button>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
                 <canvas ref={canvasRef} className="hidden" />
@@ -219,10 +264,10 @@ const handleScan = async (bagId: string) => {
               <AlertDescription>
                 <strong>Use this feature to:</strong>
                 <ul className="list-disc list-inside mt-2 space-y-1">
-                  <li>Check how faulty bags came to the counter</li>
-                  <li>Understand a bag's complete usage history</li>
-                  <li>Investigate any issues with specific bags</li>
-                  <li>View all workers who have handled the bag</li>
+                  <li>View the user associated with the bag</li>
+                  <li>Check how many times the bag has been used</li>
+                  <li>Identify the last worker who handled the bag</li>
+                  <li>Review the last scan date and type</li>
                 </ul>
               </AlertDescription>
             </Alert>
@@ -231,81 +276,50 @@ const handleScan = async (bagId: string) => {
 
         {bagHistory && (
           <>
-            {/* Complete Transaction History */}
+            {/* Bag Details */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5" />
-                  Complete Bag Transaction History
+                  <CheckCircle className="w-5 h-5" />
+                  Bag Details
                 </CardTitle>
-                <p className="text-sm text-gray-600">
-                  Bag ID: {bagHistory.bagId} | Status: {bagHistory.status} | Total Scans: {bagHistory.totalScans} | Faults: {bagHistory.faultCount}
-                </p>
+                <p className="text-sm text-gray-600">Details for Bag ID: {bagHistory.id}</p>
               </CardHeader>
-              <CardContent>
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Transaction ID</TableHead>
-                        <TableHead>Date & Time</TableHead>
-                        <TableHead>Action</TableHead>
-                        <TableHead>Worker</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {bagHistory.transactions.map((transaction) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell className="font-medium">{transaction.id}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Calendar className="w-4 h-4 text-gray-400" />
-                              {transaction.date} {transaction.time}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={transaction.action === "Checkout" ? "default" : "secondary"}
-                              className={
-                                transaction.action === "Checkout"
-                                  ? "bg-blue-100 text-blue-800"
-                                  : "bg-green-100 text-green-800"
-                              }
-                            >
-                              {transaction.action}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <User className="w-4 h-4 text-gray-400" />
-                              <div>
-                                <p className="font-medium">{transaction.workerName}</p>
-                                <p className="text-xs text-gray-500">{transaction.workerId}</p>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={transaction.status === "Success" ? "secondary" : "destructive"}
-                              className={
-                                transaction.status === "Success"
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-red-100 text-red-800"
-                              }
-                            >
-                              {transaction.status === "Success" ? (
-                                <QrCode className="w-3 h-3 mr-1" />
-                              ) : (
-                                <AlertTriangle className="w-3 h-3 mr-1" />
-                              )}
-                              {transaction.status}
-                            </Badge>
-                            </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-gray-600">Bag ID</p>
+                    <p className="text-lg">{bagHistory.id}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-gray-600">User ID</p>
+                    <p className="text-lg">{bagHistory.user_id}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-gray-600">Number of Times Used</p>
+                    <p className="text-lg">{bagHistory.number_of_time_used}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-gray-600">Worker ID</p>
+                    <p className="text-lg">{bagHistory.worker_id}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-gray-600">Last Scan Date</p>
+                    <p className="text-lg">{bagHistory.last_scan_date}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-gray-600">Last Scan Type</p>
+                    <Badge
+                      variant={bagHistory.last_scan_type === "Checkout" ? "default" : "secondary"}
+                      className={
+                        bagHistory.last_scan_type === "Checkout"
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-green-100 text-green-800"
+                      }
+                    >
+                      {bagHistory.last_scan_type}
+                    </Badge>
+                  </div>
                 </div>
               </CardContent>
             </Card>

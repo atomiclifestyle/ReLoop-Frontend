@@ -14,7 +14,7 @@ import jsQR from "jsqr";
 import { useSession } from "next-auth/react";
 
 export default function ScanPage() {
-  const [scanMode, setScanMode] = useState<"checkout" | "recycle">("checkout");
+  const [scanMode, setScanMode] = useState<"Checkout" | "Recycle">("Checkout");
   const [userId, setUserId] = useState("");
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
@@ -71,13 +71,17 @@ export default function ScanPage() {
         inversionAttempts: "dontInvert",
       });
 
-      const base64Image = canvas.toDataURL("image/png", 1.0);
-
-      if (code) {
-        sendQRToBackend(base64Image, code.data);
-      } else {
-        setError("No QR code found in the image. Please try again.");
-      }
+      // Convert canvas to Blob and then to File
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const file = new File([blob], "qr_code.png", { type: "image/png" });
+          if (code) {
+            sendQRToBackend(file, code.data);
+          } else {
+            setError("No QR code found in the image. Please try again.");
+          }
+        }
+      }, "image/png", 1.0);
     }
   };
 
@@ -98,9 +102,8 @@ export default function ScanPage() {
             inversionAttempts: "dontInvert",
           });
 
-          const base64Image = canvas.toDataURL("image/png", 1.0);
           if (code) {
-            sendQRToBackend(base64Image, code.data);
+            sendQRToBackend(file, code.data); // Pass the original file
           } else {
             setError("No QR code found in the uploaded image.");
           }
@@ -110,7 +113,7 @@ export default function ScanPage() {
     }
   };
 
-  const sendQRToBackend = async (base64Image: string, qrData?: string) => {
+  const sendQRToBackend = async (imageFile: File, qrData?: string) => {
     if (!userId.trim()) {
       setError("Please enter User ID before scanning");
       return;
@@ -121,18 +124,18 @@ export default function ScanPage() {
     setScanResult(null);
 
     try {
+      const formData = new FormData();
+      formData.append("uploaded_qr", imageFile);
+      formData.append("user_id", userId);
+      formData.append("scan_mode", scanMode);
+      // formData.append("worker_id", "1");
+
       const response = await fetch("https://reloop.onrender.com/dashboard/worker/scan_qr", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${session?.access_token || ""}`,
         },
-        body: JSON.stringify({
-          uploaded_qr: base64Image,
-          user_id: userId,
-          scan_mode: scanMode,
-          worker_id: "1",
-        }),
+        body: formData,
       });
 
       if (!response.ok) {
@@ -204,8 +207,8 @@ export default function ScanPage() {
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
               <Button
-                variant={scanMode === "checkout" ? "default" : "outline"}
-                onClick={() => setScanMode("checkout")}
+                variant={scanMode === "Checkout" ? "default" : "outline"}
+                onClick={() => setScanMode("Checkout")}
                 className="h-20 flex flex-col gap-2"
               >
                 <ShoppingCart className="w-6 h-6" />
@@ -213,8 +216,8 @@ export default function ScanPage() {
                 <span className="text-xs opacity-75">Customer using bag</span>
               </Button>
               <Button
-                variant={scanMode === "recycle" ? "default" : "outline"}
-                onClick={() => setScanMode("recycle")}
+                variant={scanMode === "Recycle" ? "default" : "outline"}
+                onClick={() => setScanMode("Recycle")}
                 className="h-20 flex flex-col gap-2"
               >
                 <Recycle className="w-6 h-6" />
@@ -228,11 +231,11 @@ export default function ScanPage() {
         <Alert>
           <AlertDescription>
             <strong>Current Mode:</strong>{" "}
-            <Badge variant={scanMode === "checkout" ? "default" : "secondary"}>
-              {scanMode === "checkout" ? "Checkout" : "Recycle"}
+            <Badge variant={scanMode === "Checkout" ? "default" : "secondary"}>
+              {scanMode === "Checkout" ? "Checkout" : "Recycle"}
             </Badge>
             <br />
-            {scanMode === "checkout"
+            {scanMode === "Checkout"
               ? "Scan when a customer is taking a bag to carry their items."
               : "Scan when a customer is returning a bag for recycling."}
           </AlertDescription>
@@ -334,7 +337,7 @@ export default function ScanPage() {
                 <CheckCircle className="h-4 w-4" />
                 <AlertDescription>
                   <strong>Success!</strong> Bag {scanResult} has been scanned in{" "}
-                  <Badge variant={scanMode === "checkout" ? "default" : "secondary"}>{scanMode}</Badge> mode for User
+                  <Badge variant={scanMode === "Checkout" ? "default" : "secondary"}>{scanMode}</Badge> mode for User
                   ID: {userId}. The transaction has been sent to the backend.
                 </AlertDescription>
               </Alert>
