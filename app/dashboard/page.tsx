@@ -37,11 +37,11 @@ const userData: UserData = {
   email: "",
   bagsReturned: 0,
   bagsCollected: 0,
-  totalCoins: 450,
+  totalCoins: 0,
   recentPurchases: [
-    { id: "PUR001", billNumber: "WM-2024-001", date: "2024-01-15", bagsUsed: 3 },
-    { id: "PUR002", billNumber: "WM-2024-002", date: "2024-01-14", bagsUsed: 2 },
-    { id: "PUR003", billNumber: "WM-2024-003", date: "2024-01-13", bagsUsed: 5 },
+    // { id: "PUR001", billNumber: "WM-2024-001", date: "2024-01-15", bagsUsed: 3 },
+    // { id: "PUR002", billNumber: "WM-2024-002", date: "2024-01-14", bagsUsed: 2 },
+    // { id: "PUR003", billNumber: "WM-2024-003", date: "2024-01-13", bagsUsed: 5 },
   ],
 }
 
@@ -89,7 +89,49 @@ export default function Dashboard() {
     }
   };
 
+  const fetchCoins = async()=>{
+    const res = await fetch(`${BASE_BACKEND_URL}/dashboard/user/coin_info`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': `Bearer ${data.access_token}`,
+        },
+      });
+
+      if (!res.ok) {
+        console.error("Failed to fetch coins:", res.statusText);
+        return;
+      }
+      const response = await res.json();
+      setuser((prev)=>({
+        ...prev,
+        totalCoins : response.total_coin_earned
+      }))
+  }
+
+  const fetchTransactions = async()=>{
+    const res = await fetch(`${BASE_BACKEND_URL}/dashboard/user/purchase_transactions`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': `Bearer ${data.access_token}`,
+        },
+      });
+
+      if (!res.ok) {
+        console.error("Failed to fetch coins:", res.statusText);
+        return;
+      }
+      const response = await res.json();
+      setuser((prev)=>({
+        ...prev,
+        recentPurchases : response
+      }))
+  }
+
   fetchProfile();
+  fetchCoins()
+  fetchTransactions()
 }, [status, data]);
 
 
