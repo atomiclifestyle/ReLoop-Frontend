@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,14 +10,15 @@ import { ArrowLeft, Coins, CreditCard, CheckCircle, AlertCircle } from "lucide-r
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { BASE_BACKEND_URL } from "../constants"
+import {useSession} from 'next-auth/react'
 
 export default function RedeemPage() {
+  const {status , data} = useSession()
   const [amount, setAmount] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const router = useRouter()
-
-  const availableCoins = 450
+  const [availableCoins, setavailableCoins] = useState(0)
   const maxRedeemAmount = Math.floor(availableCoins / 10) * 10 // Round down to nearest 10
 
   const handleRedeem = async () => {
@@ -33,15 +34,15 @@ export default function RedeemPage() {
 
     setIsProcessing(true)
 
-     const res = await fetch(`${BASE_BACKEND_URL}/dashboard/user/redeem/${amount}`,{
-          method : 'POST',
-          headers:{
-            'Content-Type' : 'application/json'
-          },
-        })
-    
-        const response = await res.json();
-        console.log(response)
+    const res = await fetch(`${BASE_BACKEND_URL}/dashboard/user/redeem/${amount}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+    })
+
+    const response = await res.json();
+    console.log(response)
 
     setIsProcessing(false)
     setShowSuccess(true)
@@ -51,6 +52,26 @@ export default function RedeemPage() {
       router.push("/dashboard")
     }, 3000)
   }
+
+  useEffect(() => {
+    const fetchCoins = async () => {
+      const res = await fetch(`${BASE_BACKEND_URL}/dashboard/user/coin_info`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'authorization': `Bearer ${data?.access_token}`,
+        },
+      });
+
+      if (!res.ok) {
+        console.error("Failed to fetch coins:", res.statusText);
+        return;
+      }
+      const response = await res.json();
+      setavailableCoins(response)
+    }
+    fetchCoins()
+  }, [])
 
   if (showSuccess) {
     return (
